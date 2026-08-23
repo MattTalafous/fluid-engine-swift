@@ -2,6 +2,12 @@ name: vox.Force
 
 options:
   bundleIdPrefix: com.matttalafous
+  deploymentTarget:
+    iOS: "15.0"
+
+configs:
+  Debug: debug
+  Release: release
 
 settings:
   base:
@@ -9,10 +15,6 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: NO
-
-configs:
-  Debug: debug
-  Release: release
 
 targets:
   vox.Force:
@@ -22,20 +24,10 @@ targets:
 
     sources:
       - path: vox.Force
-        includes:
-          - "*.swift"
-          - "*.metal"
-          - "**/*.swift"
-          - "**/*.metal"
+        type: group
         excludes:
+          - Info.plist
           - "Preview Content/**"
-        buildPhase: sources
-
-      - path: vox.Force/Base.lproj
-        buildPhase: resources
-
-      - path: vox.Force/Models
-        buildPhase: resources
 
     info:
       path: vox.Force/Info.plist
@@ -47,7 +39,6 @@ targets:
         EXECUTABLE_NAME: vox.Force
 
         TARGETED_DEVICE_FAMILY: "1,2"
-
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: NO
 
