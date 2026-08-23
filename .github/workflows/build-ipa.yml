@@ -14,23 +14,57 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: Show environment
+        run: |
+          set -euxo pipefail
+          xcodebuild -version
+          swift --version
+          uname -a
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          set -euxo pipefail
+          brew install xcodegen
 
       - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: List schemes
         run: |
+          set -euxo pipefail
+          xcodegen generate
+          ls -la
+
+          if [ ! -d "vox.Force.xcodeproj" ]; then
+            echo "ERROR: Xcode project was not generated"
+            exit 1
+          fi
+
+      - name: List project and schemes
+        run: |
+          set -euxo pipefail
           xcodebuild \
             -project vox.Force.xcodeproj \
             -list
 
+      - name: Show build settings
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -project vox.Force.xcodeproj \
+            -scheme vox.Force \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            -showBuildSettings
+
       - name: Build unsigned iOS app
         run: |
+          set -euxo pipefail
+
+          rm -rf "$PWD/build"
+
           xcodebuild \
             -project vox.Force.xcodeproj \
             -scheme vox.Force \
@@ -38,34 +72,172 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$PWD/build" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            build
+            clean build
 
-      - name: Find built app
+      - name: Inspect build products
         run: |
-          find "$PWD/build" -type d -name "*.app" -print
+          set -euxo pipefail
 
-      - name: Package IPA
-        run: |
-          APP_PATH="$(find "$PWD/build/Build/Products" -type d -name "vox.Force.app" | head -n 1)"
+          echo "======================================"
+          echo "BUILD PRODUCTS"
+          echo "======================================"
+
+          find "$PWD/build/Build/Products" -maxdepth 6 -print || true
+
+          echo "======================================"
+          echo "SEARCHING FOR APP"
+          echo "======================================"
+
+          APP_PATH="$(find "$PWD/build/Build/Products" \
+            -type d \
+            -name "vox.Force.app" \
+            -print \
+            -quit)"
 
           if [ -z "$APP_PATH" ]; then
-            echo "vox.Force.app not found"
+            echo "ERROR: vox.Force.app was not found"
             exit 1
           fi
 
-          echo "Using app at: $APP_PATH"
+          echo "APP_PATH=$APP_PATH"
 
-          mkdir -p Payload
-          cp -R "$APP_PATH" Payload/
+          echo "======================================"
+          echo "APP CONTENTS"
+          echo "======================================"
 
-          zip -r vox.Force.ipa Payload
+          ls -la "$APP_PATH"
+          find "$APP_PATH" -maxdepth 3 -print
 
-      - name: Upload IPA artifact
+          echo "======================================"
+          echo "INFO.PLIST"
+          echo "======================================"
+
+          plutil -p "$APP_PATH/Info.plist"
+
+          EXECUTABLE_NAME="$(
+            /usr/libexec/PlistBuddy \
+              -c 'Print :CFBundleExecutable' \
+              "$APP_PATH/Info.plist"
+          )"
+
+          echo "CFBundleExecutable=$EXECUTABLE_NAME"
+
+          EXECUTABLE_PATH="$APP_PATH/$EXECUTABLE_NAME"
+
+          echo "Expected executable:"
+          echo "$EXECUTABLE_PATH"
+
+          if [ ! -e "$EXECUTABLE_PATH" ]; then
+            echo "ERROR: Expected executable does not exist"
+            exit 1
+          fi
+
+          if [ ! -f "$EXECUTABLE_PATH" ]; then
+            echo "ERROR: Expected executable exists but is NOT a regular file"
+            ls -ld "$EXECUTABLE_PATH"
+            exit 1
+          fi
+
+          echo "======================================"
+          echo "EXECUTABLE INFORMATION"
+          echo "======================================"
+
+          ls -lh "$EXECUTABLE_PATH"
+          file "$EXECUTABLE_PATH"
+
+          if ! file "$EXECUTABLE_PATH" | grep -q "Mach-O"; then
+            echo "ERROR: Executable is not a Mach-O binary"
+            exit 1
+          fi
+
+          if ! file "$EXECUTABLE_PATH" | grep -q "arm64"; then
+            echo "ERROR: Executable does not appear to contain arm64"
+            exit 1
+          fi
+
+          chmod +x "$EXECUTABLE_PATH"
+
+          echo "$APP_PATH" > "$PWD/app_path.txt"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euxo pipefail
+
+          APP_PATH="$(cat "$PWD/app_path.txt")"
+
+          rm -rf "$PWD/Payload"
+          rm -f "$PWD/vox.Force.ipa"
+
+          mkdir -p "$PWD/Payload"
+
+          cp -R "$APP_PATH" "$PWD/Payload/"
+
+          echo "======================================"
+          echo "FINAL PAYLOAD"
+          echo "======================================"
+
+          find "$PWD/Payload" -maxdepth 4 -print
+
+          cd "$PWD"
+          /usr/bin/zip -qry "vox.Force.ipa" Payload
+
+          echo "======================================"
+          echo "IPA CREATED"
+          echo "======================================"
+
+          ls -lh vox.Force.ipa
+          unzip -l vox.Force.ipa | head -100
+
+      - name: Final IPA validation
+        run: |
+          set -euxo pipefail
+
+          rm -rf "$PWD/ipa-check"
+          mkdir "$PWD/ipa-check"
+
+          unzip -q "$PWD/vox.Force.ipa" -d "$PWD/ipa-check"
+
+          APP_PATH="$PWD/ipa-check/Payload/vox.Force.app"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: Payload/vox.Force.app missing from IPA"
+            exit 1
+          fi
+
+          EXECUTABLE_NAME="$(
+            /usr/libexec/PlistBuddy \
+              -c 'Print :CFBundleExecutable' \
+              "$APP_PATH/Info.plist"
+          )"
+
+          EXECUTABLE_PATH="$APP_PATH/$EXECUTABLE_NAME"
+
+          if [ ! -f "$EXECUTABLE_PATH" ]; then
+            echo "ERROR: Final IPA does not contain executable"
+            exit 1
+          fi
+
+          file "$EXECUTABLE_PATH"
+
+          if ! file "$EXECUTABLE_PATH" | grep -q "Mach-O"; then
+            echo "ERROR: Final IPA executable is not Mach-O"
+            exit 1
+          fi
+
+          echo "======================================"
+          echo "IPA VALIDATION PASSED"
+          echo "======================================"
+
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: vox.Force-unsigned-ipa
           path: vox.Force.ipa
+          if-no-files-found: error
+          retention-days: 7
