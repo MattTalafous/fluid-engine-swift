@@ -5,9 +5,10 @@ options:
   deploymentTarget:
     iOS: "15.0"
 
-configs:
-  Debug: debug
-  Release: release
+packages:
+  swift-log:
+    url: https://github.com/apple/swift-log.git
+    from: 1.0.0
 
 settings:
   base:
@@ -15,6 +16,10 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: NO
+
+configs:
+  Debug: debug
+  Release: release
 
 targets:
   vox.Force:
@@ -24,10 +29,13 @@ targets:
 
     sources:
       - path: vox.Force
-        type: group
         excludes:
           - Info.plist
           - "Preview Content/**"
+
+    dependencies:
+      - package: swift-log
+        product: Logging
 
     info:
       path: vox.Force/Info.plist
@@ -36,18 +44,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.matttalafous.voxForce
         PRODUCT_NAME: vox.Force
-        EXECUTABLE_NAME: vox.Force
-
         TARGETED_DEVICE_FAMILY: "1,2"
-        ARCHS: arm64
-        ONLY_ACTIVE_ARCH: NO
-
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
-        DEVELOPMENT_TEAM: ""
-
         ENABLE_BITCODE: NO
+        ARCHS: arm64
 
     scheme:
       gatherCoverageData: false
