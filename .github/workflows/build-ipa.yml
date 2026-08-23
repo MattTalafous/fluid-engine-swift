@@ -30,40 +30,25 @@ jobs:
         run: |
           set -euxo pipefail
           xcodegen generate
-          ls -la
 
           if [ ! -d "vox.Force.xcodeproj" ]; then
-            echo "ERROR: Xcode project was not generated"
+            echo "ERROR: vox.Force.xcodeproj was not generated"
             exit 1
           fi
 
-      - name: List project and schemes
+      - name: List project
         run: |
           set -euxo pipefail
           xcodebuild \
             -project vox.Force.xcodeproj \
             -list
 
-      - name: Show build settings
-        run: |
-          set -euxo pipefail
-          xcodebuild \
-            -project vox.Force.xcodeproj \
-            -scheme vox.Force \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination "generic/platform=iOS" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            -showBuildSettings
-
       - name: Build unsigned iOS app
         run: |
-          set -euxo pipefail
+          set +e
 
           rm -rf "$PWD/build"
+          rm -f "$PWD/build.log"
 
           xcodebuild \
             -project vox.Force.xcodeproj \
@@ -78,9 +63,47 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            clean build
+            clean build 2>&1 | tee "$PWD/build.log"
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+
+          echo ""
+          echo "======================================"
+          echo "COMPILER ERRORS"
+          echo "======================================"
+
+          grep -nEi \
+            '(^|[[:space:]])(error:|fatal error:)|:[0-9]+:[0-9]+: error:' \
+            "$PWD/build.log" \
+            | tail -120 || true
+
+          echo ""
+          echo "======================================"
+          echo "METAL / SWIFT ERROR CONTEXT"
+          echo "======================================"
+
+          grep -nEi \
+            -B 8 -A 12 \
+            'error:|fatal error:|\.metal:[0-9]+:[0-9]+:|\.swift:[0-9]+:[0-9]+:' \
+            "$PWD/build.log" \
+            | tail -250 || true
+
+          echo ""
+          echo "xcodebuild exit status: $BUILD_STATUS"
+
+          exit $BUILD_STATUS
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-build-log
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Inspect build products
+        if: success()
         run: |
           set -euxo pipefail
 
@@ -88,11 +111,7 @@ jobs:
           echo "BUILD PRODUCTS"
           echo "======================================"
 
-          find "$PWD/build/Build/Products" -maxdepth 6 -print || true
-
-          echo "======================================"
-          echo "SEARCHING FOR APP"
-          echo "======================================"
+          find "$PWD/build/Build/Products" -maxdepth 6 -print
 
           APP_PATH="$(find "$PWD/build/Build/Products" \
             -type d \
@@ -101,7 +120,7 @@ jobs:
             -quit)"
 
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: vox.Force.app was not found"
+            echo "ERROR: vox.Force.app not found"
             exit 1
           fi
 
@@ -113,6 +132,11 @@ jobs:
 
           ls -la "$APP_PATH"
           find "$APP_PATH" -maxdepth 3 -print
+
+          if [ ! -f "$APP_PATH/Info.plist" ]; then
+            echo "ERROR: Info.plist missing"
+            exit 1
+          fi
 
           echo "======================================"
           echo "INFO.PLIST"
@@ -130,34 +154,31 @@ jobs:
 
           EXECUTABLE_PATH="$APP_PATH/$EXECUTABLE_NAME"
 
-          echo "Expected executable:"
-          echo "$EXECUTABLE_PATH"
-
           if [ ! -e "$EXECUTABLE_PATH" ]; then
             echo "ERROR: Expected executable does not exist"
             exit 1
           fi
 
           if [ ! -f "$EXECUTABLE_PATH" ]; then
-            echo "ERROR: Expected executable exists but is NOT a regular file"
+            echo "ERROR: Expected executable is not a regular file"
             ls -ld "$EXECUTABLE_PATH"
             exit 1
           fi
 
           echo "======================================"
-          echo "EXECUTABLE INFORMATION"
+          echo "EXECUTABLE INFO"
           echo "======================================"
 
           ls -lh "$EXECUTABLE_PATH"
           file "$EXECUTABLE_PATH"
 
           if ! file "$EXECUTABLE_PATH" | grep -q "Mach-O"; then
-            echo "ERROR: Executable is not a Mach-O binary"
+            echo "ERROR: Executable is not Mach-O"
             exit 1
           fi
 
           if ! file "$EXECUTABLE_PATH" | grep -q "arm64"; then
-            echo "ERROR: Executable does not appear to contain arm64"
+            echo "ERROR: Executable is not arm64"
             exit 1
           fi
 
@@ -166,6 +187,7 @@ jobs:
           echo "$APP_PATH" > "$PWD/app_path.txt"
 
       - name: Package unsigned IPA
+        if: success()
         run: |
           set -euxo pipefail
 
@@ -175,11 +197,10 @@ jobs:
           rm -f "$PWD/vox.Force.ipa"
 
           mkdir -p "$PWD/Payload"
-
           cp -R "$APP_PATH" "$PWD/Payload/"
 
           echo "======================================"
-          echo "FINAL PAYLOAD"
+          echo "PAYLOAD CONTENTS"
           echo "======================================"
 
           find "$PWD/Payload" -maxdepth 4 -print
@@ -187,14 +208,10 @@ jobs:
           cd "$PWD"
           /usr/bin/zip -qry "vox.Force.ipa" Payload
 
-          echo "======================================"
-          echo "IPA CREATED"
-          echo "======================================"
-
           ls -lh vox.Force.ipa
-          unzip -l vox.Force.ipa | head -100
 
-      - name: Final IPA validation
+      - name: Validate final IPA
+        if: success()
         run: |
           set -euxo pipefail
 
@@ -206,7 +223,7 @@ jobs:
           APP_PATH="$PWD/ipa-check/Payload/vox.Force.app"
 
           if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: Payload/vox.Force.app missing from IPA"
+            echo "ERROR: Payload/vox.Force.app missing"
             exit 1
           fi
 
@@ -219,14 +236,19 @@ jobs:
           EXECUTABLE_PATH="$APP_PATH/$EXECUTABLE_NAME"
 
           if [ ! -f "$EXECUTABLE_PATH" ]; then
-            echo "ERROR: Final IPA does not contain executable"
+            echo "ERROR: IPA does not contain the executable"
             exit 1
           fi
 
           file "$EXECUTABLE_PATH"
 
           if ! file "$EXECUTABLE_PATH" | grep -q "Mach-O"; then
-            echo "ERROR: Final IPA executable is not Mach-O"
+            echo "ERROR: Final executable is not Mach-O"
+            exit 1
+          fi
+
+          if ! file "$EXECUTABLE_PATH" | grep -q "arm64"; then
+            echo "ERROR: Final executable is not arm64"
             exit 1
           fi
 
@@ -235,6 +257,7 @@ jobs:
           echo "======================================"
 
       - name: Upload unsigned IPA
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vox.Force-unsigned-ipa
