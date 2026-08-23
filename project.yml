@@ -23,6 +23,8 @@ targets:
     sources:
       - path: vox.Force
         includes:
+          - "*.swift"
+          - "*.metal"
           - "**/*.swift"
           - "**/*.metal"
         excludes:
@@ -42,6 +44,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.matttalafous.voxForce
         PRODUCT_NAME: vox.Force
+        EXECUTABLE_NAME: vox.Force
+
         TARGETED_DEVICE_FAMILY: "1,2"
 
         ARCHS: arm64
