@@ -1,1 +1,43 @@
+name: vox.Force
 
+options:
+  bundleIdPrefix: com.matttalafous
+  deploymentTarget:
+    iOS: "15.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  vox.Force:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+
+    sources:
+      - path: vox.Force
+        excludes:
+          - Info.plist
+          - "Preview Content/**"
+
+    info:
+      path: vox.Force/Info.plist
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.matttalafous.voxForce
+        PRODUCT_NAME: vox.Force
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        ENABLE_BITCODE: NO
+
+    scheme:
+      gatherCoverageData: false
