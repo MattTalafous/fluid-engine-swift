@@ -36,19 +36,26 @@ struct ContentView: View {
                     renderer.ray = nil
 
                     let particles = Particles()
+
                     let emitter = Particles.fire(
                         size: renderer.metalView.drawableSize
                     )
 
                     emitter.position = [0, -10]
                     particles.emitters.append(emitter)
+
                     renderer.partcles = particles
                 }
             }) {
                 Text("Change Render Mode")
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
-                    .background(Color.black.opacity(0.65))
+                    .background(
+                        SwiftUI.Color.black.opacity(0.65)
+                    )
+                    .foregroundColor(
+                        SwiftUI.Color.white
+                    )
                     .cornerRadius(10)
             }
             .padding(.top, 12)
