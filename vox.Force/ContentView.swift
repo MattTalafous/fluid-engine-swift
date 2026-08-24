@@ -10,18 +10,49 @@ import SwiftUI
 
 struct ContentView: View {
     let renderer = Renderer()
-    
+    @State private var mode = 0
+
     var body: some View {
-        NavigationView {
+        ZStack(alignment: .top) {
+            MetalKitView(view: renderer)
+                .edgesIgnoringSafeArea(.all)
+
             Button(action: {
-                print("Button pressed!")
+                mode = (mode + 1) % 3
+
+                switch mode {
+                case 0:
+                    renderer.RenderableObj = FlipSolver2Renderable()
+                    renderer.ray = nil
+                    renderer.partcles = nil
+
+                case 1:
+                    renderer.RenderableObj = nil
+                    renderer.ray = RayMarching()
+                    renderer.partcles = nil
+
+                default:
+                    renderer.RenderableObj = nil
+                    renderer.ray = nil
+
+                    let particles = Particles()
+                    let emitter = Particles.fire(
+                        size: renderer.metalView.drawableSize
+                    )
+
+                    emitter.position = [0, -10]
+                    particles.emitters.append(emitter)
+                    renderer.partcles = particles
+                }
             }) {
                 Text("Change Render Mode")
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.65))
+                    .cornerRadius(10)
             }
-            
-            MetalKitView(view: renderer)
+            .padding(.top, 12)
         }
-        .frame(minWidth: 700, minHeight: 300)
     }
 }
 
