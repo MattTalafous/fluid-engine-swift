@@ -1,4 +1,4 @@
-Old project I found that I tried to get running. kinda poo
+Old project I found that I tried to get running. kinda not great. but I was bored
 
 
 This project is inspired by [fluid-engine-dev](https://github.com/doyubkim/fluid-engine-dev) which can support bunch of numerical methods like Flip and SPH. This project transfer all C++ code from [fluid-engine-dev](https://github.com/doyubkim/fluid-engine-dev) by using Swift, which is a very elegent language. Swift is a young language which have less third-party code and I found nothing about numerical simulation at all. luckily Swift 5 is ABI stable and Grand Center Dispatch is functioning well which can replace TBB very well. 
